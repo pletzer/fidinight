@@ -1,29 +1,12 @@
-[cylc]
-   flow_name = nightly_pipeline
-
-[scheduler]
-   allow implicit tasks = True
-   #cycling mode = daily
-   #initial cycle point = 2025-06-12T02
-   #[[trigger]]
-   #   clock = 02:00
-
-[visualization]
-   default node attributes = "succeed-by-default"
-
-[graph]
-   #R1//P1D = build => run => test => perf
-   R1 = build
+[scheduling]
+    [[graph]]
+        R1 = """
+            build
+        """
 
 [runtime]
    [[build]]
-      script = ./scripts/build.sh
+      script = """
+        build.sh
+        """
 
-   [[run]]
-      script = ./scripts/run.sh
-
-   [[test]]
-      script = ./scripts/test.sh
-
-   [[perf]]
-      script = ./scripts/performance.sh
