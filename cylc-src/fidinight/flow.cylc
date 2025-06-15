@@ -1,12 +1,47 @@
 [scheduling]
     [[graph]]
         R1 = """
-            build
+            build => run => test => timings
         """
 
 [runtime]
    [[build]]
       script = """
-        build.sh
+        cd $CYLC_WORKFLOW_SHARE_DIR
+        git clone https://github.com/pletzer/fidibench.git
+        cd fidibench
+        mkdir build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=Release
+        cd upwind/cxx
+        make -j 4
+        echo "build in $(pwd) is done"
         """
+   [[run]]
+      script = """
+        cd $CYLC_WORKFLOW_SHARE_DIR/fidibench/build/upwind/cxx
+        mpiexec -n 4 ./upwindMpiCxx -numCells 128 -numSteps 2 >& log.txt
+      """
+   [[test]]
+      script = """
+        cd $CYLC_WORKFLOW_SHARE_DIR/fidibench/build/upwind/cxx
+        checksum=$(grep "Check sum" log.txt | awk -F : '{print $2}' | tr -d ' ')
+        if [ "$checksum" != "1" ]; then
+          echo "Checksum test failed! checksum = >${checksum}<"
+          exit 1
+        fi
+      """
+   [[timings]]
+      script = """
+        cd $CYLC_WORKFLOW_SHARE_DIR/fidibench/build/upwind/cxx
+        if [ ! -f timings.csv ]; then
+          # create the failed
+          echo "date,tmin,tmax,tavg" > timings.csv
+        fi
+        # extract the times
+        tmin=$(grep "times" log.txt | awk -F : '{print $2}' | awk -F / '{print $1}' | tr -d ' ')
+        tmax=$(grep "times" log.txt | awk -F : '{print $2}' | awk -F / '{print $2}' | tr -d ' ')
+        tavg=$(grep "times" log.txt | awk -F : '{print $2}' | awk -F / '{print $3}' | tr -d ' ')
+        echo "$(date),$tmin,$tmax,$tavg" >> timings.csv
+      """
 
