@@ -1,47 +1,58 @@
+[scheduler]
+    allow implicit tasks = True
+
 [scheduling]
+    #initial cycle point = 2025-06-16T12
     [[graph]]
         R1 = """
-            build => run => test => timings
+            build => run_test_time_store
         """
 
 [runtime]
    [[build]]
       script = """
         cd $CYLC_WORKFLOW_SHARE_DIR
-        git clone https://github.com/pletzer/fidibench.git
-        cd fidibench
-        mkdir build
-        cd build
-        cmake .. -DCMAKE_BUILD_TYPE=Release
-        cd upwind/cxx
-        make -j 4
-        echo "build in $(pwd) is done"
+        if [ ! -d fidibench ]; then
+          git clone https://github.com/pletzer/fidibench.git
+          cd fidibench
+          mkdir build
+          cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+          cd upwind/cxx
+          make -j 4
+          echo "build in $(pwd) is done"
+          cd $CYLC_WORKFLOW_SHARE_DIR
+        fi
+        # check that the executable exists
+        if [ ! -f fidibench/build/upwind/cxx/upwindMpiCxx ]; then
+          echo "Error: could not find upwindMpiCxx"
+          exit
+        fi
         """
-   [[run]]
+   [[run_test_time_store]]
       script = """
-        cd $CYLC_WORKFLOW_SHARE_DIR/fidibench/build/upwind/cxx
-        mpiexec -n 4 ./upwindMpiCxx -numCells 128 -numSteps 2 >& log.txt
-      """
-   [[test]]
-      script = """
-        cd $CYLC_WORKFLOW_SHARE_DIR/fidibench/build/upwind/cxx
+        # run
+        mpiexec -n 4 $CYLC_WORKFLOW_SHARE_DIR/fidibench/build/upwind/cxx/upwindMpiCxx -numCells 128 -numSteps 2 >& log.txt
+        cat log.txt
+
+        # test
         checksum=$(grep "Check sum" log.txt | awk -F : '{print $2}' | tr -d ' ')
         if [ "$checksum" != "1" ]; then
           echo "Checksum test failed! checksum = >${checksum}<"
           exit 1
         fi
-      """
-   [[timings]]
-      script = """
-        cd $CYLC_WORKFLOW_SHARE_DIR/fidibench/build/upwind/cxx
+
+        # time
+        tmin=$(grep "times" log.txt | awk -F : '{print $2}' | awk -F / '{print $1}' | tr -d ' ')
+        tmax=$(grep "times" log.txt | awk -F : '{print $2}' | awk -F / '{print $2}' | tr -d ' ')
+        tavg=$(grep "times" log.txt | awk -F : '{print $2}' | awk -F / '{print $3}' | tr -d ' ')
+
+        # store
+        cd $CYLC_WORKFLOW_SHARE_DIR
         if [ ! -f timings.csv ]; then
           # create the failed
           echo "date,tmin,tmax,tavg" > timings.csv
         fi
         # extract the times
-        tmin=$(grep "times" log.txt | awk -F : '{print $2}' | awk -F / '{print $1}' | tr -d ' ')
-        tmax=$(grep "times" log.txt | awk -F : '{print $2}' | awk -F / '{print $2}' | tr -d ' ')
-        tavg=$(grep "times" log.txt | awk -F : '{print $2}' | awk -F / '{print $3}' | tr -d ' ')
         echo "$(date),$tmin,$tmax,$tavg" >> timings.csv
       """
-
