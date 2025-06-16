@@ -1,5 +1,15 @@
+#!Jinja2
+
+{% set NUM_CELLS = "128" %}
+{% set NUM_STEPS = "2" %}
+{% set NUM_PROCS = "8" %}
+{% set NUM_NODES = "2" %}
+{% set PARTITION = "genoa" %}
+{% set TIME = "00:10:00" %}
+{% set MEM = "5g" %}
+
 [scheduling]
-    initial cycle point = previous(T00)
+    initial cycle point = previous(T02)
     [[graph]]
         P1D = """
             run
@@ -10,6 +20,10 @@
 [runtime]
    [[run]]
       script = """
+        module purge
+        module load intel
+        export CXX=icc
+
         # build
         git clone https://github.com/pletzer/fidibench.git
         cd fidibench
@@ -21,8 +35,16 @@
         echo "build in $(pwd) is done"
 
         # run 
-        echo "will execute ./upwindMpiCxx..."
-        mpiexec -n 4 ./upwindMpiCxx -numCells 128 -numSteps 2 >& log.txt
+        numcells={{NUM_CELLS}}
+        numsteps={{NUM_STEPS}}
+        numprocs={{NUM_PROCS}}
+        numnodes={{NUM_NODES}}
+        partition={{PARTITION}}
+        time={{TIME}}
+        mem={{MEM}}
+        cmd="srun --time=$time --mem=$mem -p $partition -n $numprocs -N $numnodes ./upwindMpiCxx -numCells $numcells -numSteps $numsteps >& log.txt"
+        echo "Will execute $cmd"
+        srun -p $partition -n $numprocs -N $numnodes ./upwindMpiCxx -numCells $numcells -numSteps $numsteps >& log.txt
         echo "Done."
         cat log.txt
 
@@ -46,9 +68,9 @@
         cd $CYLC_WORKFLOW_SHARE_DIR
         if [ ! -f timings.csv ]; then
           # create the failed
-          echo "date,tmin,tmax,tavg" > timings.csv
+          echo "date,partition,numProcs,numNodes,numCells,numSteps,tmin,tmax,tavg" > timings.csv
         fi
         # extract the times
-        echo "$(date),$tmin,$tmax,$tavg" >> timings.csv
+        echo "$(date),$partition,$numprocs,$numnodes,$numcells,$numsteps,$tmin,$tmax,$tavg" >> timings.csv
         
       """
