@@ -2,11 +2,12 @@
 
 {% set NUM_CELLS = "128" %}
 {% set NUM_STEPS = "2" %}
-{% set NUM_PROCS = "8" %}
+{% set NUM_PROCS = "4" %}
 {% set NUM_NODES = "2" %}
 {% set PARTITION = "genoa" %}
 {% set TIME = "00:10:00" %}
 {% set MEM = "5g" %}
+{% set HPC3 = false %}
 
 [scheduling]
     initial cycle point = previous(T02)
@@ -20,9 +21,11 @@
 [runtime]
    [[run]]
       script = """
-        module purge
-        module load intel
-        export CXX=icc
+        {% if HPC3 %}
+          module purge
+          module load intel
+          export CXX=icc
+        {% endif %}
 
         # build
         git clone https://github.com/pletzer/fidibench.git
@@ -42,9 +45,13 @@
         partition={{PARTITION}}
         time={{TIME}}
         mem={{MEM}}
-        cmd="srun --time=$time --mem=$mem -p $partition -n $numprocs -N $numnodes ./upwindMpiCxx -numCells $numcells -numSteps $numsteps >& log.txt"
+        {% if HPC3 %}
+          cmd="srun --time=$time --mem=$mem -p $partition -n $numprocs -N $numnodes ./upwindMpiCxx -numCells $numcells -numSteps $numsteps"
+        {% else %}
+          cmd="mpiexec -n $numprocs ./upwindMpiCxx -numCells $numcells -numSteps $numsteps"
+        {% endif %}
         echo "Will execute $cmd"
-        srun -p $partition -n $numprocs -N $numnodes ./upwindMpiCxx -numCells $numcells -numSteps $numsteps >& log.txt
+        $cmd >& log.txt
         echo "Done."
         cat log.txt
 
